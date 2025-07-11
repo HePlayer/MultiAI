@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 多 Agent 聊天界面</title>
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #3a8dde 0%, #1e3c72 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        
+        /* 加载动画样式 */
+        .loading-bubble {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            background: #e6f0fa;
+            border-radius: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .loading-dots {
+            display: flex;
+            align-items: center;
+        }
+        
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: #3a8dde;
+            border-radius: 50%;
+            display: inline-block;
+            animation: loading 1.4s infinite ease-in-out both;
+        }
+        
+        .loading-dots span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        
+        .loading-dots span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        
+        @keyframes loading {
+            0%, 80%, 100% { 
+                transform: scale(0);
+            } 40% { 
+                transform: scale(1.0);
+            }
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .sidebar {
+            position: absolute;
+            left: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        .agent-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+            margin-bottom: 8px;
+            transition: box-shadow 0.2s;
+        }
+        .agent-icon.selected {
+            box-shadow: 0 0 0 3px #3a8dde;
+        }
+        .remove-agent {
+            display: none;
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background: #ff4d4f;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 16px;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .agent-icon:hover .remove-agent {
+            display: flex;
+        }
+        .add-agent {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #3a8dde;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 16px;
+        }
+        .model-select-sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .model-select-sidebar.active {
+            transform: translateX(0);
+        }
+        .model-select-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .model-option {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .model-option:hover {
+            background: #f0f5ff;
+        }
+        .model-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            margin-right: 15px;
+            object-fit: cover;
+        }
+        .model-name {
+            font-size: 18px;
+            font-weight: 500;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+        }
+        .overlay.active {
+            display: block;
+        }
+        .add-agent.disabled {
+            background: #b0c4de;
+            cursor: not-allowed;
+        }
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 400px;
+            max-width: 700px;
+        }
+        .chat-box {
+            width: 100%;
+            min-height: 350px;
+            max-height: 60vh;
+            background: rgba(240,248,255,0.98); /* 更浅的蓝白色 */
+            border-radius: 24px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 24px 24px 24px; /* 顶部不再留空间 */
+            overflow-y: auto;
+            margin-bottom: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+        }
+        .agent-title {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 20px;
+            font-weight: bold;
+            color: #2266bb;
+            background: linear-gradient(90deg, #e6f0fa 60%, #dbeafe 100%);
+            border-radius: 12px 12px 12px 0;
+            padding: 4px 18px 4px 16px;
+            box-shadow: 0 2px 8px rgba(58,141,222,0.08);
+            z-index: 100;
+            letter-spacing: 1px;
+            pointer-events: none;
+        }
+        .message {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message.user {
+            align-items: flex-end;
+        }
+        .message.ai {
+            align-items: flex-start;
+        }
+        .message-content {
+            background: #e6f0fa;
+            color: #222;
+            border-radius: 16px;
+            padding: 10px 16px;
+            max-width: 80%;
+            word-break: break-word;
+        }
+        .message.user .message-content {
+            background: #3a8dde;
+            color: #fff;
+        }
+        
+        .message.system {
+            width: 100%;
+            margin: 10px 0;
+            padding: 5px 0;
+            text-align: center;
+        }
+        .input-area {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            position: absolute;
+            bottom: 32px;
+            left: 0;
+        }
+        .input-box {
+            width: 60%;
+            min-width: 320px;
+            max-width: 600px;
+            border-radius: 24px;
+            border: none;
+            padding: 16px 20px;
+            font-size: 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            outline: none;
+            resize: none;
+            background: #fff;
+            transition: box-shadow 0.2s;
+        }
+        .input-box:focus {
+            box-shadow: 0 0 0 2px #3a8dde;
+        }
+        
+        /* 讨论中悬浮框样式 */
+        .discussion-panel {
+            position: fixed;
+            bottom: 160px; /* 将悬浮框往上移动 */
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 12px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .discussion-panel.active {
+            display: flex;
+        }
+        
+        .discussion-status {
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .pause-button, .stop-button {
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+            font-family: Arial, sans-serif;
+        }
+        
+        .pause-button {
+            background: #ffa940;
+        }
+        
+        .pause-button:hover {
+            background: #ffb366;
+        }
+        
+        .pause-button.paused {
+            background: #52c41a;
+        }
+        
+        .pause-button.paused:hover {
+            background: #73d13d;
+        }
+        
+        .stop-button {
+            background: #ff4d4f;
+        }
+        
+        .stop-button:hover {
+            background: #ff7875;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="model-select-sidebar" id="modelSelectSidebar">
+            <div class="model-select-header">
+                <h2>选择AI模型</h2>
+                <button class="close-btn" id="closeModelSelect">&times;</button>
+            </div>
+            <div class="model-option" data-model="Zhipu" onclick="selectModel('Zhipu')">
+                <img src="img/Zhipu.png" class="model-icon" alt="Zhipu">
+                <span class="model-name">Zhipu AI</span>
+            </div>
+            <div class="model-option" data-model="Spark" onclick="selectModel('Spark')">
+                <img src="img/Spark.png" class="model-icon" alt="Spark">
+                <span class="model-name">Spark AI</span>
+            </div>
+        </div>
+        <div class="overlay" id="overlay"></div>
+        <div class="sidebar" id="sidebar">
+            <!-- agent icons & add button -->
+        </div>
+        <div class="chat-area">
+            <div class="chat-box" id="chatBox">
+                <!-- chat messages -->
+            </div>
+        </div>
+        <div class="input-area">
+            <textarea id="inputBox" class="input-box" rows="2" placeholder="输入内容，Shift+Enter换行，Enter发送..."></textarea>
+        </div>
+        
+        <!-- 讨论中悬浮框 -->
+        <div class="discussion-panel" id="discussionPanel">
+            <button class="pause-button" id="pauseDiscussion">||</button>
+            <div class="discussion-status">讨论中...</div>
+            <button class="stop-button" id="stopDiscussion">■</button>
+        </div>
+    </div>
+    <script>
+        // agent 管理
+        let agents = [createAgent(1)];
+        let selectedAgent = 1;
+        const maxAgents = 3;
+
+        function createAgent(id, model) {
+            return {
+                id,
+                model: model || 'Zhipu', // 默认Zhipu模型
+                messages: []
+            };
+        }
+
+        function selectModel(model) {
+            if (agents.length < maxAgents) {
+                const newId = (agents.length > 0 ? Math.max(...agents.map(a=>parseInt(a.id)))+1 : 1).toString();
+                agents.push(createAgent(newId, model));
+                selectedAgent = newId;
+                renderSidebar();
+                renderChat();
+                // 隐藏模型选择侧边栏
+                document.getElementById('modelSelectSidebar').classList.remove('active');
+                document.getElementById('overlay').classList.remove('active');
+                // 通知后端创建agent
+                fetch('http://127.0.0.1:5000/agent', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: newId.toString(), model: model})
+                })
+                .catch(err => console.error('创建agent失败:', err));
+                // 提示Agent已加入聊天
+                addSystemMessage(`Agent ${newId} 已加入聊天`);
+            }
+        }
+
+        function renderSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.innerHTML = '';
+            agents.forEach((agent, idx) => {
+                const icon = document.createElement('div');
+                icon.className = 'agent-icon' + (selectedAgent === agent.id ? ' selected' : '');
+                icon.title = `AI Agent ${agent.id}`;
+                const model = agent.model || 'Zhipu';
+                icon.innerHTML = `<img src="img/${model}.png" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">`;
+                icon.onclick = () => { selectedAgent = agent.id; renderSidebar(); renderChat(); };
+
+                // 删除按钮
+                if (agents.length > 1) {
+                    const remove = document.createElement('div');
+                    remove.className = 'remove-agent';
+                    remove.innerHTML = '−';
+                    remove.onclick = (e) => {
+                        e.stopPropagation();
+                        removeAgent(agent.id);
+                    };
+                    icon.appendChild(remove);
+                }
+                sidebar.appendChild(icon);
+            });
+            // add agent
+            const addBtn = document.createElement('div');
+            addBtn.className = 'add-agent' + (agents.length >= maxAgents ? ' disabled' : '');
+            addBtn.innerHTML = '+';
+            addBtn.title = agents.length >= maxAgents ? '最多3个AI Agent' : '添加AI Agent';
+            addBtn.onclick = () => {
+                if (agents.length < maxAgents) {
+                    document.getElementById('modelSelectSidebar').classList.add('active');
+                    document.getElementById('overlay').classList.add('active');
+                }
+            };
+
+            // 关闭模型选择侧边栏
+            document.getElementById('closeModelSelect').onclick = () => {
+                document.getElementById('modelSelectSidebar').classList.remove('active');
+                document.getElementById('overlay').classList.remove('active');
+            };
+
+            document.getElementById('overlay').onclick = () => {
+                document.getElementById('modelSelectSidebar').classList.remove('active');
+                document.getElementById('overlay').classList.remove('active');
+            };
+            sidebar.appendChild(addBtn);
+        }
+
+        function removeAgent(id) {
+            if (agents.length <= 1) return;
+            const idx = agents.findIndex(a => a.id === id);
+            
+            // 保存被删除agent的消息
+            const removedAgent = agents[idx];
+            const removedAgentModel = removedAgent.model;
+            
+            // 从agents数组中移除agent，但保留其消息
+            agents.splice(idx, 1);
+            
+            if (selectedAgent === id) {
+                selectedAgent = agents[0].id;
+            }
+            
+            renderSidebar();
+            renderChat();
+            
+            // 提示Agent已退出聊天
+            addSystemMessage(`Agent ${id} 已退出聊天`);
+        }
+
+        // 存储所有消息的全局数组，包括已删除agent的消息
+        let allMessages = [];
+        
+        function renderChat() {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+            
+            // 按时间顺序渲染所有消息
+            allMessages.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message ' + msg.role;
+                
+                if (msg.role === 'user') {
+                    msgDiv.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span style="font-size: 12px; color: #666;">用户</span>
+                        </div>
+                        <div class="message-content" style="max-width: 100%; width: fit-content;">${msg.content.replace(/\n/g, '<br>')}</div>
+                    `;
+                } else {
+                    msgDiv.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <img src="img/${msg.model}.png" style="width: 24px; height: 24px; border-radius: 50%;">
+                            <span style="font-size: 12px; color: #666;">Agent ${msg.agentId}</span>
+                        </div>
+                        <div class="message-content" style="max-width: 100%; width: fit-content;">${msg.content.replace(/\n/g, '<br>')}</div>
+                    `;
+                }
+                chatBox.appendChild(msgDiv);
+            });
+            
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function addSystemMessage(content) {
+            const chatBox = document.getElementById('chatBox');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message system';
+            msgDiv.innerHTML = `<div style="text-align: center; color: #666; font-size: 12px;">${content}</div>`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // 输入框事件
+        const inputBox = document.getElementById('inputBox');
+        inputBox.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const content = inputBox.value.trim();
+                if (content) {
+                    sendMessage(content);
+                    inputBox.value = '';
+                }
+            }
+        });
+
+        // 跟踪当前是否有请求正在进行中
+        let isRequestInProgress = false;
+        
+        // 跟踪当前是否在讨论模式
+        let isDiscussionMode = false;
+        
+        // 讨论ID，用于停止讨论
+        let currentDiscussionId = null;
+        
+        // 暂停状态管理
+        let discussionState = {
+            isPaused: false,
+            waitingForUser: false,
+            pausedAfterAgent: null,
+            eventSource: null
+        };
+        
+        
+        // 用户发言状态追踪
+        let userInterventionState = {
+            pending: false,
+            lastMessage: null,
+            targetAgent: null
+        };
+        
+        // 显示讨论中悬浮框
+        function showDiscussionPanel() {
+            document.getElementById('discussionPanel').classList.add('active');
+            isDiscussionMode = true;
+        }
+        
+        // 隐藏讨论中悬浮框
+        function hideDiscussionPanel() {
+            document.getElementById('discussionPanel').classList.remove('active');
+            isDiscussionMode = false;
+        }
+        
+        // 停止讨论
+        function stopDiscussion() {
+            if (currentDiscussionId) {
+                // 立即移除思考气泡和讨论面板
+                removeThinkingBubble();
+                hideDiscussionPanel();
+                
+                // 立即重置请求状态，允许用户继续输入
+                isRequestInProgress = false;
+                
+                // 添加系统消息
+                addSystemMessage('讨论已停止');
+                
+                // 通知服务器停止讨论
+                fetch('http://127.0.0.1:5000/stop_discussion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        discussion_id: currentDiscussionId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('停止讨论响应:', data);
+                })
+                .catch(err => {
+                    console.error('停止讨论失败:', err);
+                });
+                
+                // 重置讨论ID
+                currentDiscussionId = null;
+            }
+        }
+        
+        function sendMessage(content) {
+            // 如果讨论处于暂停状态且等待用户发言，则处理用户插入发言
+            if (discussionState.isPaused && discussionState.waitingForUser) {
+                sendUserIntervention(content);
+                return;
+            }
+            
+            // 如果已经有请求正在进行中，不要发送新请求
+            if (isRequestInProgress && !discussionState.waitingForUser) {
+                console.log('已有请求正在进行中，请等待...');
+                return;
+            }
+            
+            // 添加用户消息到全局消息数组
+            allMessages.push({
+                role: 'user',
+                content: content,
+                timestamp: Date.now()
+            });
+            
+            // 立即显示用户输入
+            const currentAgent = agents.find(agent => agent.id === selectedAgent);
+            if (currentAgent) {
+                currentAgent.messages.push({
+                    role: 'user',
+                    content: content
+                });
+                renderChat();
+            }
+
+            // 标记请求开始
+            isRequestInProgress = true;
+            
+            // 单agent使用流式输出，多agent使用原有方式
+            if (agents.length === 1) {
+                sendStreamMessage(content);
+            } else {
+                sendNormalMessage(content);
+            }
+        }
+        
+        function sendStreamMessage(content) {
+            const currentAgent = agents.find(agent => agent.id === selectedAgent);
+            
+            // 先显示思考加载效果
+            showThinkingBubble(currentAgent.id, currentAgent.model);
+            
+            // 使用EventSource进行流式通信
+            const eventSource = new EventSource('http://127.0.0.1:5000/chat_stream?' + new URLSearchParams({
+                agent_ids: JSON.stringify([currentAgent.id]),
+                message: content,
+                current_agent: selectedAgent,
+                enable_discussion: 'false'
+            }));
+            
+            let fullContent = '';
+            let streamBubble = null;
+            
+            eventSource.onopen = function(event) {
+                console.log('EventSource连接已打开');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('收到流式数据:', data);
+                    
+                    if (data.type === 'start') {
+                        console.log('开始流式接收:', data);
+                        // 移除思考气泡，创建流式气泡
+                        removeThinkingBubble();
+                        streamBubble = createStreamBubble(currentAgent.id, currentAgent.model);
+                    } else if (data.type === 'content') {
+                        fullContent += data.content;
+                        if (streamBubble) {
+                            updateStreamBubble(streamBubble, fullContent);
+                        }
+                    } else if (data.type === 'end') {
+                        console.log('流式接收完成');
+                        if (streamBubble) {
+                            finalizeStreamBubble(streamBubble, data.full_content || fullContent);
+                        }
+                        
+                        // 添加到全局消息数组
+                        allMessages.push({
+                            role: 'assistant',
+                            content: data.full_content || fullContent,
+                            agentId: currentAgent.id,
+                            model: currentAgent.model,
+                            timestamp: Date.now()
+                        });
+                        
+                        // 同时添加到对应agent的消息数组
+                        currentAgent.messages.push({
+                            role: 'assistant',
+                            content: data.full_content || fullContent
+                        });
+                        
+                        eventSource.close();
+                        isRequestInProgress = false;
+                    } else if (data.type === 'error') {
+                        console.error('流式接收错误:', data.content);
+                        if (streamBubble) {
+                            finalizeStreamBubble(streamBubble, data.content);
+                        } else {
+                            removeThinkingBubble();
+                        }
+                        eventSource.close();
+                        isRequestInProgress = false;
+                    }
+                } catch (e) {
+                    console.error('解析流式数据失败:', e, 'Raw data:', event.data);
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                console.error('EventSource错误:', event);
+                removeThinkingBubble();
+                
+                // 如果EventSource失败，回退到fetch方式
+                console.log('EventSource失败，尝试fetch方式...');
+                sendStreamMessageFallback(content, currentAgent);
+            };
+        }
+        
+        // 备用的fetch流式方法
+        function sendStreamMessageFallback(content, currentAgent) {
+            // 创建新的流式气泡
+            const streamBubble = createStreamBubble(currentAgent.id, currentAgent.model);
+            
+            fetch('http://127.0.0.1:5000/chat_stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream'
+                },
+                body: JSON.stringify({
+                    agent_ids: [currentAgent.id],
+                    message: content,
+                    current_agent: selectedAgent,
+                    enable_discussion: false
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+                let buffer = '';
+                let streamStarted = false;
+                
+                function readStream() {
+                    return reader.read().then(({ done, value }) => {
+                        if (done) {
+                            console.log('Fetch流式接收完成');
+                            if (streamBubble && fullContent) {
+                                finalizeStreamBubble(streamBubble, fullContent);
+                                
+                                // 添加到全局消息数组
+                                allMessages.push({
+                                    role: 'assistant',
+                                    content: fullContent,
+                                    agentId: currentAgent.id,
+                                    model: currentAgent.model,
+                                    timestamp: Date.now()
+                                });
+                                
+                                // 同时添加到对应agent的消息数组
+                                currentAgent.messages.push({
+                                    role: 'assistant',
+                                    content: fullContent
+                                });
+                            }
+                            isRequestInProgress = false;
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value, { stream: true });
+                        buffer += chunk;
+                        
+                        // 按行分割处理
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || ''; // 保留最后一个不完整的行
+                        
+                        for (const line of lines) {
+                            if (line.trim() === '') continue;
+                            
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const jsonStr = line.slice(6).trim();
+                                    if (jsonStr === '') continue;
+                                    
+                                    const data = JSON.parse(jsonStr);
+                                    console.log('Fetch收到流式数据:', data);
+                                    
+                                    if (data.type === 'start') {
+                                        console.log('Fetch开始流式接收:', data);
+                                        streamStarted = true;
+                                    } else if (data.type === 'content') {
+                                        fullContent += data.content;
+                                        if (streamBubble) {
+                                            updateStreamBubble(streamBubble, fullContent);
+                                        }
+                                    } else if (data.type === 'end') {
+                                        console.log('Fetch流式接收完成');
+                                        if (streamBubble) {
+                                            finalizeStreamBubble(streamBubble, data.full_content || fullContent);
+                                        }
+                                        
+                                        // 添加到全局消息数组
+                                        allMessages.push({
+                                            role: 'assistant',
+                                            content: data.full_content || fullContent,
+                                            agentId: currentAgent.id,
+                                            model: currentAgent.model,
+                                            timestamp: Date.now()
+                                        });
+                                        
+                                        // 同时添加到对应agent的消息数组
+                                        currentAgent.messages.push({
+                                            role: 'assistant',
+                                            content: data.full_content || fullContent
+                                        });
+                                        
+                                        isRequestInProgress = false;
+                                        return;
+                                    } else if (data.type === 'error') {
+                                        console.error('Fetch流式接收错误:', data.content);
+                                        if (streamBubble) {
+                                            finalizeStreamBubble(streamBubble, data.content);
+                                        }
+                                        isRequestInProgress = false;
+                                        return;
+                                    }
+                                } catch (e) {
+                                    console.error('Fetch解析流式数据失败:', e, 'Line:', line);
+                                }
+                            }
+                        }
+                        
+                        return readStream();
+                    });
+                }
+                
+                return readStream();
+            })
+            .catch(error => {
+                console.error('Fetch流式请求失败:', error);
+                if (streamBubble) {
+                    finalizeStreamBubble(streamBubble, '[连接错误]');
+                }
+                isRequestInProgress = false;
+            });
+        }
+        
+        function sendNormalMessage(content) {
+            const currentAgent = agents.find(agent => agent.id === selectedAgent);
+            
+            // 多agent使用流式讨论
+            if (agents.length > 1) {
+                sendStreamDiscussion(content);
+            } else {
+                // 单agent使用原有逻辑
+                // 显示AI正在思考的加载动画
+                showThinkingBubble(currentAgent.id, currentAgent.model);
+                
+                // 发送消息到后端
+                fetch('http://127.0.0.1:5000/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        agent_ids: agents.map(a => a.id),
+                        message: content,
+                        current_agent: selectedAgent,
+                        enable_discussion: false
+                    })
+                })
+                .then(response => {
+                    console.log('收到服务器响应:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('解析响应数据:', data);
+                    
+                    // 移除思考中的气泡
+                    removeThinkingBubble();
+                    
+                    // 标记请求结束
+                    isRequestInProgress = false;
+                    
+                    // 渲染回复
+                    if (data.discussion && Array.isArray(data.discussion)) {
+                        data.discussion.forEach(reply => {
+                            if (reply.type !== 'discussion_status' && reply.type !== 'user_message') {
+                                // 添加到全局消息数组
+                                allMessages.push({
+                                    role: 'assistant',
+                                    content: reply.content,
+                                    agentId: reply.agent_id,
+                                    model: reply.avatar.includes('Spark') ? 'Spark' : 'Zhipu',
+                                    timestamp: Date.now()
+                                });
+                                
+                                // 同时添加到对应agent的消息数组
+                                const agent = agents.find(a => a.id.toString() === reply.agent_id);
+                                if (agent) {
+                                    agent.messages.push({
+                                        role: 'assistant',
+                                        content: reply.content
+                                    });
+                                }
+                            }
+                        });
+                        renderChat();
+                    } else if (data.error) {
+                        console.error('服务器返回错误:', data.error);
+                        // 不显示错误消息，只在控制台记录
+                    }
+                })
+                .catch(err => {
+                    console.error('发送消息失败:', err);
+                    
+                    // 移除思考中的气泡
+                    removeThinkingBubble();
+                    
+                    // 标记请求结束
+                    isRequestInProgress = false;
+                    
+                    // 不显示任何错误消息，只在控制台记录
+                });
+            }
+        }
+        
+        // 流式讨论处理函数
+        function sendStreamDiscussion(content) {
+            // 使用EventSource进行流式讨论
+            const eventSource = new EventSource('http://127.0.0.1:5000/chat_stream?' + new URLSearchParams({
+                agent_ids: JSON.stringify(agents.map(a => a.id)),
+                message: content,
+                current_agent: selectedAgent,
+                enable_discussion: 'true'
+            }));
+            
+            let currentStreamBubble = null;
+            let currentAgentContent = '';
+            let discussionStarted = false;
+            
+            eventSource.onopen = function(event) {
+                console.log('讨论EventSource连接已打开');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('收到讨论流式数据:', data);
+                    
+                    if (data.type === 'start') {
+                        console.log('开始流式处理:', data);
+                        // 保存discussion_id，用于暂停/停止功能
+                        if (data.discussion_id) {
+                            currentDiscussionId = data.discussion_id;
+                            console.log('已保存discussion_id:', currentDiscussionId);
+                        }
+                        
+                        // 只有在真正的复杂问题讨论模式下才显示悬浮窗
+                        if (data.mode === 'discussion' && agents.length > 1) {
+                            discussionStarted = true;
+                            showDiscussionPanel();
+                            console.log('显示讨论悬浮框 - 复杂问题模式');
+                        } else if (data.mode === 'simple') {
+                            console.log('简单问题模式 - 不显示讨论悬浮框');
+                            // 简单问题模式，不显示悬浮框，等待agent直接回答
+                        }
+                    } else if (data.type === 'framework_start') {
+                        // 显示框架创建状态
+                        addSystemMessage(data.content);
+                    } else if (data.type === 'framework_complete') {
+                        // 框架创建完成
+                        addSystemMessage('讨论框架创建完成');
+                    } else if (data.type === 'agent_thinking') {
+                        // Agent开始思考
+                        removeThinkingBubble(); // 移除之前的思考气泡
+                        showThinkingBubble(data.agent_id, data.model);
+                        addSystemMessage(`Agent ${data.agent_id} 正在思考: ${data.question}`);
+                    } else if (data.type === 'agent_content_chunk') {
+                        // 流式内容块
+                        if (!currentStreamBubble || currentStreamBubble.dataset.agentId !== data.agent_id) {
+                            // 创建新的流式气泡
+                            removeThinkingBubble();
+                            currentStreamBubble = createStreamBubble(data.agent_id, data.model);
+                            currentStreamBubble.dataset.agentId = data.agent_id;
+                            currentAgentContent = '';
+                        }
+                        
+                        currentAgentContent += data.content;
+                        updateStreamBubble(currentStreamBubble, currentAgentContent);
+                    } else if (data.type === 'agent_content_complete') {
+                        // 完整内容（非流式agent）
+                        removeThinkingBubble();
+                        currentStreamBubble = createStreamBubble(data.agent_id, data.model);
+                        finalizeStreamBubble(currentStreamBubble, data.content);
+                        
+                        // 添加到消息数组
+                        allMessages.push({
+                            role: 'assistant',
+                            content: data.content,
+                            agentId: data.agent_id,
+                            model: data.model,
+                            timestamp: Date.now()
+                        });
+                        
+                        currentStreamBubble = null;
+                    } else if (data.type === 'agent_complete') {
+                        // Agent完成回答
+                        if (currentStreamBubble) {
+                            finalizeStreamBubble(currentStreamBubble, currentAgentContent);
+                            
+                            // 添加到消息数组
+                            allMessages.push({
+                                role: 'assistant',
+                                content: currentAgentContent,
+                                agentId: data.agent_id,
+                                model: data.model,
+                                timestamp: Date.now()
+                            });
+                            
+                            currentStreamBubble = null;
+                            currentAgentContent = '';
+                        }
+                    } else if (data.type === 'agent_message') {
+                        // 简单回复（非讨论模式）
+                        removeThinkingBubble();
+                        
+                        allMessages.push({
+                            role: 'assistant',
+                            content: data.content,
+                            agentId: data.agent_id,
+                            model: data.model,
+                            timestamp: Date.now()
+                        });
+                        renderChat();
+                    } else if (data.type === 'summary_start') {
+                        addSystemMessage(data.content);
+                    } else if (data.type === 'summary_complete') {
+                        addSystemMessage('讨论总结完成');
+                        
+                        allMessages.push({
+                            role: 'assistant',
+                            content: data.content,
+                            agentId: data.message.agent_id,
+                            model: data.message.avatar.includes('Spark') ? 'Spark' : 'Zhipu',
+                            timestamp: Date.now()
+                        });
+                        renderChat();
+                    } else if (data.type === 'discussion_complete') {
+                        console.log('流式讨论完成');
+                        hideDiscussionPanel();
+                        removeThinkingBubble();
+                        resetInputToNormal(); // 重置输入框状态
+                        eventSource.close();
+                    } else if (data.type === 'discussion_stopped') {
+                        addSystemMessage(data.content);
+                        hideDiscussionPanel();
+                        removeThinkingBubble();
+                        resetInputToNormal(); // 重置输入框状态
+                        eventSource.close();
+                        // 清除超时定时器
+                        if (connectionTimeout) {
+                            clearTimeout(connectionTimeout);
+                            connectionTimeout = null;
+                        }
+                    } else if (data.type === 'error') {
+                        console.error('讨论流式接收错误:', data.content);
+                        addSystemMessage(`错误: ${data.content}`);
+                        hideDiscussionPanel();
+                        removeThinkingBubble();
+                        resetInputToNormal(); // 重置输入框状态
+                        eventSource.close();
+                        // 清除超时定时器
+                        if (connectionTimeout) {
+                            clearTimeout(connectionTimeout);
+                            connectionTimeout = null;
+                        }
+                    } else if (data.type === 'agent_selected') {
+                        // 显示agent智能选择消息
+                        addSystemMessage(`📢 ${data.content} (${data.reason})`);
+                        console.log('Agent智能选择:', data);
+                    }
+                } catch (e) {
+                    console.error('解析讨论流式数据失败:', e, 'Raw data:', event.data);
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                console.error('讨论EventSource错误:', event);
+                // 移除错误提示，直接处理
+                hideDiscussionPanel();
+                removeThinkingBubble();
+                eventSource.close();
+                isRequestInProgress = false;
+                
+                // 不显示错误消息，静默处理
+                console.log('EventSource连接中断，已静默处理');
+            };
+            
+            // 保存当前讨论的EventSource以便停止
+            currentDiscussionEventSource = eventSource;
+        }
+        
+        // 轮询讨论状态
+        function pollDiscussionStatus(discussionId) {
+            if (!isDiscussionMode) return; // 如果不再是讨论模式，停止轮询
+            
+            fetch(`http://127.0.0.1:5000/discussion_status/${discussionId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('讨论状态:', data);
+                
+                // 如果有新消息，添加到聊天框
+                if (data.new_messages && Array.isArray(data.new_messages) && data.new_messages.length > 0) {
+                    // 移除之前的思考气泡（如果有）
+                    removeThinkingBubble();
+                    
+                    data.new_messages.forEach(msg => {
+                        // 添加到全局消息数组
+                        allMessages.push({
+                            role: 'assistant',
+                            content: msg.content,
+                            agentId: msg.agent_id,
+                            model: msg.avatar.includes('Spark') ? 'Spark' : 'Zhipu',
+                            timestamp: Date.now()
+                        });
+                        
+                        // 同时添加到对应agent的消息数组
+                        const agent = agents.find(a => a.id.toString() === msg.agent_id);
+                        if (agent) {
+                            agent.messages.push({
+                                role: 'assistant',
+                                content: msg.content
+                            });
+                        }
+                    });
+                    
+                    // 确保渲染聊天内容
+                    renderChat();
+                    
+                    // 显示下一个agent的思考气泡
+                    if (data.next_agent_id) {
+                        const nextAgent = agents.find(a => a.id.toString() === data.next_agent_id);
+                        if (nextAgent) {
+                            showThinkingBubble(data.next_agent_id, nextAgent.model);
+                        }
+                    }
+                }
+                
+                // 如果讨论已完成，隐藏讨论面板
+                if (data.status === 'completed') {
+                    hideDiscussionPanel();
+                    removeThinkingBubble(); // 确保移除所有思考气泡
+                    isRequestInProgress = false;
+                    
+                    // 确保最后一次渲染聊天内容
+                    renderChat();
+                } else {
+                    // 如果没有思考气泡，显示一个
+                    if (!document.getElementById('thinking-bubble') && data.next_agent_id) {
+                        const nextAgent = agents.find(a => a.id.toString() === data.next_agent_id);
+                        if (nextAgent) {
+                            showThinkingBubble(data.next_agent_id, nextAgent.model);
+                        }
+                    }
+                    
+                    // 继续轮询
+                    setTimeout(() => pollDiscussionStatus(discussionId), 1000);
+                }
+            })
+            .catch(err => {
+                console.error('获取讨论状态失败:', err);
+                // 出错时也继续轮询
+                setTimeout(() => pollDiscussionStatus(discussionId), 2000);
+            });
+        }
+        
+        function showThinkingBubble(agentId, model) {
+            const chatBox = document.getElementById('chatBox');
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.id = 'thinking-bubble';
+            thinkingDiv.className = 'message ai';
+            thinkingDiv.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <img src="img/${model}.png" style="width: 24px; height: 24px; border-radius: 50%;">
+                    <span style="font-size: 12px; color: #666;">Agent ${agentId}</span>
+                </div>
+                <div class="loading-bubble">
+                    <div class="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            chatBox.appendChild(thinkingDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        function removeThinkingBubble() {
+            const thinkingBubble = document.getElementById('thinking-bubble');
+            if (thinkingBubble) {
+                thinkingBubble.remove();
+            }
+        }
+
+        // 流式消息气泡相关函数
+        function createStreamBubble(agentId, model) {
+            const chatBox = document.getElementById('chatBox');
+            const streamDiv = document.createElement('div');
+            streamDiv.id = 'stream-bubble';
+            streamDiv.className = 'message ai';
+            streamDiv.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <img src="img/${model}.png" style="width: 24px; height: 24px; border-radius: 50%;">
+                    <span style="font-size: 12px; color: #666;">Agent ${agentId}</span>
+                </div>
+                <div class="message-content" style="max-width: 100%; width: fit-content; position: relative;">
+                    <span id="stream-content"></span>
+                    <div class="loading-dots" style="display: inline-block; margin-left: 8px;">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            chatBox.appendChild(streamDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return streamDiv;
+        }
+        
+        function updateStreamBubble(streamBubble, content) {
+            const contentSpan = streamBubble.querySelector('#stream-content');
+            if (contentSpan) {
+                contentSpan.innerHTML = content.replace(/\n/g, '<br>');
+                // 滚动到底部
+                const chatBox = document.getElementById('chatBox');
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+        
+        function finalizeStreamBubble(streamBubble, finalContent) {
+            const contentDiv = streamBubble.querySelector('.message-content');
+            if (contentDiv) {
+                // 移除加载圈，显示最终内容
+                contentDiv.innerHTML = finalContent.replace(/\n/g, '<br>');
+                // 滚动到底部
+                const chatBox = document.getElementById('chatBox');
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        // 初始化
+        renderSidebar();
+        renderChat();
+        
+        // 暂停/继续讨论
+        function pauseResumeDiscussion() {
+            if (discussionState.isPaused) {
+                // 当前是暂停状态，点击继续
+                resumeDiscussion();
+            } else {
+                // 当前是运行状态，点击暂停
+                pauseDiscussion();
+            }
+        }
+        
+        function pauseDiscussion() {
+            if (!currentDiscussionId) return;
+            
+            // 发送暂停请求到服务器
+            fetch('http://127.0.0.1:5000/pause_discussion', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    discussion_id: currentDiscussionId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('暂停讨论响应:', data);
+                discussionState.isPaused = true;
+                updatePauseButton();
+                updateDiscussionStatus('已暂停，等待用户发言...');
+                
+                // 启用输入框让用户可以发言
+                enableUserInput();
+            })
+            .catch(err => {
+                console.error('暂停讨论失败:', err);
+            });
+        }
+        
+        function resumeDiscussion() {
+            if (!currentDiscussionId) return;
+            
+            // 发送继续请求到服务器
+            fetch('http://127.0.0.1:5000/resume_discussion', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    discussion_id: currentDiscussionId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('继续讨论响应:', data);
+                discussionState.isPaused = false;
+                updatePauseButton();
+                updateDiscussionStatus('讨论中...');
+                
+                // 禁用输入框
+                disableUserInput();
+            })
+            .catch(err => {
+                console.error('继续讨论失败:', err);
+            });
+        }
+        
+        function updatePauseButton() {
+            const pauseBtn = document.getElementById('pauseDiscussion');
+            if (discussionState.isPaused) {
+                pauseBtn.innerHTML = '▶';
+                pauseBtn.classList.add('paused');
+                pauseBtn.title = '继续讨论';
+            } else {
+                pauseBtn.innerHTML = '||';
+                pauseBtn.classList.remove('paused');
+                pauseBtn.title = '暂停讨论';
+            }
+        }
+        
+        function updateDiscussionStatus(text) {
+            const statusDiv = document.querySelector('.discussion-status');
+            if (statusDiv) {
+                statusDiv.textContent = text;
+            }
+        }
+        
+        function enableUserInput() {
+            const inputBox = document.getElementById('inputBox');
+            inputBox.disabled = false;
+            inputBox.placeholder = '输入内容参与讨论，Enter发送...';
+            discussionState.waitingForUser = true;
+        }
+        
+        function disableUserInput() {
+            const inputBox = document.getElementById('inputBox');
+            inputBox.disabled = true;
+            inputBox.placeholder = '讨论中，请等待...';
+            discussionState.waitingForUser = false;
+        }
+        
+        function resetInputToNormal() {
+            const inputBox = document.getElementById('inputBox');
+            inputBox.disabled = false;
+            inputBox.placeholder = '输入内容，Shift+Enter换行，Enter发送...';
+            discussionState.waitingForUser = false;
+            isRequestInProgress = false;
+            currentDiscussionId = null;
+            
+            // 强制清理所有讨论相关状态
+            discussionState.isPaused = false;
+            isDiscussionMode = false;
+            
+            // 确保清理eventSource
+            if (currentDiscussionEventSource) {
+                try {
+                    currentDiscussionEventSource.close();
+                } catch (e) {
+                    console.log('EventSource已关闭:', e);
+                }
+                currentDiscussionEventSource = null;
+            }
+            
+            console.log('输入框已重置为正常状态，所有讨论状态已清理');
+        }
+        
+        // 用户在暂停期间发言
+        function sendUserIntervention(content) {
+            if (!currentDiscussionId || !discussionState.isPaused) return;
+            
+            // 添加用户消息
+            allMessages.push({
+                role: 'user',
+                content: content,
+                timestamp: Date.now()
+            });
+            renderChat();
+            
+            // 发送用户插入发言到服务器
+            fetch('http://127.0.0.1:5000/user_intervention', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    discussion_id: currentDiscussionId,
+                    message: content
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('用户插入发言响应:', data);
+                
+                // 自动继续讨论
+                discussionState.isPaused = false;
+                updatePauseButton();
+                updateDiscussionStatus('讨论中...');
+                disableUserInput();
+                
+                addSystemMessage('用户已加入讨论，继续...');
+            })
+            .catch(err => {
+                console.error('用户插入发言失败:', err);
+            });
+        }
+        
+        // 确保系统消息在页面加载后立即显示
+        window.addEventListener('DOMContentLoaded', (event) => {
+            addSystemMessage(`Agent 1 已加入聊天`);
+            
+            // 添加暂停/继续按钮事件监听
+            document.getElementById('pauseDiscussion').addEventListener('click', pauseResumeDiscussion);
+            
+            // 添加停止讨论按钮事件监听
+            document.getElementById('stopDiscussion').addEventListener('click', stopDiscussion);
+        });
+    </script>
+</body>
+</html>
